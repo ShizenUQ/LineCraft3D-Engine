@@ -1,41 +1,17 @@
-name: Build Debug APK
-
-on:
-  push:
-    branches: [ main, master ]
-  workflow_dispatch:
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Unpack project
-        run: |
-          mkdir project
-          unzip -o LineEngine3D.zip -d project
-          # find the folder that holds settings.gradle.kts (handles a top-level folder in the zip)
-          ROOT=$(dirname "$(find project -maxdepth 3 -name settings.gradle.kts | head -n 1)")
-          echo "PROJECT_ROOT=$ROOT" >> "$GITHUB_ENV"
-
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.10'
-
       - name: Build debug APK
         working-directory: ${{ env.PROJECT_ROOT }}
         run: |
           gradle wrapper --gradle-version 8.10
-          ./gradlew assembleDebug --stacktrace
+          set +e
+          ./gradlew assembleDebug --stacktrace > build.log 2>&1
+          STATUS=$?
+          echo "=== COMPILE ERRORS ==="
+          grep -E "^e: |What went wrong|error:|Execution failed|Unresolved|Could not" -A3 build.log | head -150
+          exit $STATUS
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: app-debug
-          path: ${{ env.PROJECT_ROOT }}/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+          name: build-log
+          path: ${{ env.PROJECT_ROOT }}/build.log
